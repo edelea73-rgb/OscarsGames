@@ -5,24 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Oscar's Sprunki Snacker Pro</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #f0f5ff; font-family: Arial, sans-serif; touch-action: none; width: 100vw; height: 100vh; }
-        canvas { display: block; width: 100%; height: 100%; }
+        * { box-sizing: border-box; -webkit-touch-callout: none; -webkit-user-select: none; }
+        body { margin: 0; padding: 0; overflow: hidden; background: #f0f5ff; font-family: Arial, sans-serif; touch-action: none; width: 100%; height: 100%; position: fixed; }
+        canvas { display: block; touch-action: none; }
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: white; display: flex; justify-content: center;
-            align-items: center; z-index: 1000; text-align: center;
+            align-items: center; z-index: 1000; text-align: center; padding: 20px;
         }
         #stopButton {
             position: absolute; top: 0; left: 0; width: 100%;
-            height: 60px; background: #ff6464; color: white;
-            border: none; font-weight: bold; font-size: 24px;
-            cursor: pointer; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            height: 50px; background: #ff6464; color: white;
+            border: none; font-weight: bold; font-size: 20px;
+            cursor: pointer; z-index: 100;
         }
     </style>
 </head>
 <body>
 
-<div id="overlay"><div><h1>Hello Oscar!</h1><h2>Tap here to start your game</h2></div></div>
+<div id="overlay"><div><h1>Hello Oscar!</h1><h2>Tap to start</h2></div></div>
 <button id="stopButton">STOP ALL SOUNDS</button>
 <canvas id="gameCanvas"></canvas>
 
@@ -43,43 +44,48 @@ async function loadSound(id) {
         const response = await fetch(`track${id+1}.wav`);
         const arrayBuffer = await response.arrayBuffer();
         soundBuffers[id] = await audioCtx.decodeAudioData(arrayBuffer);
-    } catch (e) { console.log("Sound load error: track " + (id+1)); }
+    } catch (e) { console.log("Sound load error"); }
 }
 
 function resize() {
+    // Get the EXACT inner dimensions of the browser window
     width = window.innerWidth;
     height = window.innerHeight;
     canvas.width = width;
     canvas.height = height;
     
-    // Recalculate positions for 20 characters to fit ANY screen size
     characters = [];
-    const padding = 60;
-    const availableWidth = width - (padding * 2);
-    const availableHeight = height - 250; // Leave room for top button and bottom tray
+    const topBarHeight = 50;
+    const trayHeight = 100;
+    const playAreaHeight = height - topBarHeight - trayHeight;
+    
+    // Calculate size based on available space
+    const charWidth = width / 11;
+    const charHeight = playAreaHeight / 2.5;
 
     for(let i=0; i<TOTAL_CHARS; i++) {
         let col = i % 10;
         let row = Math.floor(i / 10);
         characters.push({
             id: i,
-            x: padding + col * (availableWidth / 9),
-            y: 130 + row * (availableHeight / 1.5),
+            x: (charWidth * 0.8) + col * (width / 10.5),
+            y: topBarHeight + 60 + row * (playAreaHeight / 2.2),
             colour: `hsl(${i * (360/TOTAL_CHARS)}, 70%, 75%)`,
             isPlaying: false,
             source: null,
             mouthOpen: false,
             chewing: 0,
-            vibe: ['jump', 'shake', 'spin'][i % 3]
+            vibe: ['jump', 'shake', 'spin'][i % 3],
+            scale: Math.min(width/1300, playAreaHeight/500) // Adaptive scale
         });
         loadSound(i);
     }
     
     foodItems = [
-        { name: 'Cookie', x: width*0.2, y: height-70, color: '#8b4513', bx: width*0.2 },
-        { name: 'Broccoli', x: width*0.4, y: height-70, color: '#228b22', bx: width*0.4 },
-        { name: 'Milk', x: width*0.6, y: height-70, color: '#ffffff', bx: width*0.6 },
-        { name: 'Bunny', x: width*0.8, y: height-70, color: '#5a3214', bx: width*0.8 }
+        { name: 'Cookie', x: width*0.2, y: height-50, color: '#8b4513', bx: width*0.2 },
+        { name: 'Broccoli', x: width*0.4, y: height-50, color: '#228b22', bx: width*0.4 },
+        { name: 'Milk', x: width*0.6, y: height-50, color: '#ffffff', bx: width*0.6 },
+        { name: 'Bunny', x: width*0.8, y: height-50, color: '#5a3214', bx: width*0.8 }
     ];
 }
 
@@ -106,11 +112,11 @@ function handleStart(x, y) {
     if (!audioStarted) return;
     let hitFood = false;
     foodItems.forEach(f => {
-        if (Math.hypot(f.x - x, f.y - y) < 50) { draggingFood = f; hitFood = true; }
+        if (Math.hypot(f.x - x, f.y - y) < 40) { draggingFood = f; hitFood = true; }
     });
     if (!hitFood) {
         characters.forEach(s => {
-            if (Math.hypot(s.x - x, s.y - y) < 45) {
+            if (Math.hypot(s.x - x, s.y - y) < (40 * s.scale)) {
                 s.isPlaying = !s.isPlaying;
                 s.isPlaying ? playTrack(s) : stopTrack(s);
             }
@@ -121,7 +127,7 @@ function handleStart(x, y) {
 function handleMove(x, y) {
     if (draggingFood) {
         draggingFood.x = x; draggingFood.y = y;
-        characters.forEach(s => s.mouthOpen = Math.hypot(s.x - x, s.y - y) < 70);
+        characters.forEach(s => s.mouthOpen = Math.hypot(s.x - x, s.y - y) < (70 * s.scale));
     }
 }
 
@@ -131,7 +137,7 @@ function handleEnd() {
             if (s.mouthOpen) s.chewing = 60;
             s.mouthOpen = false;
         });
-        draggingFood.x = draggingFood.bx; draggingFood.y = height - 70;
+        draggingFood.x = draggingFood.bx; draggingFood.y = height - 50;
         draggingFood = null;
     }
 }
@@ -148,31 +154,36 @@ window.addEventListener('resize', resize);
 
 function draw(t) {
     ctx.clearRect(0,0,width,height);
-    ctx.fillStyle = "#e1e1eb"; ctx.fillRect(0, height-130, width, 130);
+    // Tray
+    ctx.fillStyle = "#e1e1eb"; ctx.fillRect(0, height-100, width, 100);
+    
     characters.forEach(s => {
         let dx = s.x, dy = s.y, angle = 0;
         if (s.isPlaying) {
-            if (s.vibe === 'jump') dy -= Math.abs(Math.sin(t*0.005)*20);
-            if (s.vibe === 'shake') dx += Math.sin(t*0.02)*3;
+            if (s.vibe === 'jump') dy -= Math.abs(math_sin(t*0.005)*20) * s.scale;
+            if (s.vibe === 'shake') dx += math_sin(t*0.02)*3;
             if (s.vibe === 'spin') angle = t*0.001;
         }
-        ctx.save(); ctx.translate(dx, dy); ctx.rotate(angle);
+        ctx.save(); ctx.translate(dx, dy); ctx.scale(s.scale, s.scale); ctx.rotate(angle);
         ctx.fillStyle = s.colour;
         ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-30,60); ctx.lineTo(30,60); ctx.fill();
         ctx.beginPath(); ctx.arc(0,0,30,0,6.28); ctx.fill();
         ctx.fillStyle="white"; ctx.beginPath(); ctx.arc(-10,-5,8,0,6.28); ctx.fill(); ctx.beginPath(); ctx.arc(10,-5,8,0,6.28); ctx.fill();
         ctx.fillStyle="black"; ctx.beginPath(); ctx.arc(-10,-5,3,0,6.28); ctx.fill(); ctx.beginPath(); ctx.arc(10,-5,3,0,6.28); ctx.fill();
         ctx.beginPath();
-        if (s.chewing > 0) { ctx.ellipse(0, 15, 12, 3 + Math.sin(t*0.05)*4, 0, 0, 6.28); s.chewing--; }
+        if (s.chewing > 0) { ctx.ellipse(0, 15, 12, 3 + math_sin(t*0.05)*4, 0, 0, 6.28); s.chewing--; }
         else if (s.mouthOpen) ctx.arc(0, 20, 15, 0, 6.28);
         else ctx.arc(0, 10, 12, 0, Math.PI, false);
         ctx.stroke(); ctx.restore();
     });
     foodItems.forEach(f => {
-        ctx.fillStyle = f.color; ctx.beginPath(); ctx.arc(f.x, f.y, 25, 0, 6.28); ctx.fill();
+        ctx.fillStyle = f.color; ctx.beginPath(); ctx.arc(f.x, f.y, 20, 0, 6.28); ctx.fill();
     });
     requestAnimationFrame(draw);
 }
+// Simple math helper for the browser
+function math_sin(v) { return Math.sin(v); }
+
 resize(); draw(0);
 </script>
 </body>
