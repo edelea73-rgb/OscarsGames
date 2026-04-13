@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Oscar's Sprunki Snacker</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #f0f5ff; font-family: Arial, sans-serif; touch-action: none; }
+        canvas { display: block; }
+        #stopButton {
+            position: absolute; top: 20px; right: 20px;
+            padding: 15px 30px; background: #ff6464; color: white;
+            border: none; border-radius: 15px; font-weight: bold; font-size: 20px;
+            cursor: pointer; z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+<button id="stopButton">STOP ALL</button>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const stopBtn = document.getElementById('stopButton');
+
+let width, height;
+let characters = [];
+let foodItems = [];
+let draggingFood = null;
+
+// Audio context for web
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const sounds = {};
+
+// UK English Colours
+const COLOURS = [
+    '#ff6b6b', '#4ecdc4', '#ffe66d', '#a29bf6', '#74b9ff',
+    '#ff9f43', '#ee5253', '#0abde3', '#10ac84', '#5f27cd'
+];
+
+function init() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+
+    // Create 10 characters for the tablet screen (fewer is better for performance)
+    characters = [];
+    for(let i=0; i<10; i++) {
+        characters.push({
+            id: i,
+            x: 100 + (i % 5) * (width/5.5),
+            y: 150 + Math.floor(i/5) * 220,
+            colour: COLOURS[i],
+            isPlaying: false,
+            mouthOpen: false,
+            chewing: 0,
+            vibe: ['jump', 'shake', 'spin'][Math.floor(Math.random()*3)]
+        });
+    }
+
+    // Food Items
+    foodItems = [
+        { name: 'Cookie', x: width*0.2, y: height-80, color: '#8b4513' },
+        { name: 'Broccoli', x: width*0.4, y: height-80, color: '#228b22' },
+        { name: 'Milk', x: width*0.6, y: height-80, color: '#ffffff' },
+        { name: 'Bunny', x: width*0.8, y: height-80, color: '#5a3214' }
+    ];
+}
+
+function drawSprunki(s, t) {
+    let dx = s.x;
+    let dy = s.y;
+    let angle = 0;
+
+    if (s.isPlaying) {
+        if (s.vibe === 'jump') dy -= Math.abs(Math.sin(t * 0.005) * 30);
+        if (s.vibe === 'shake') dx += Math.sin(t * 0.02) * 5;
+        if (s.vibe === 'spin') angle = t * 0.01;
+    }
+
+    ctx.save();
+    ctx.translate(dx, dy);
+    ctx.rotate(angle);
+
+    // Triangle Body
+    ctx.fillStyle = s.colour;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-50, 100);
+    ctx.lineTo(50, 100);
+    ctx.fill();
+
+    // Circle Head
+    ctx.beginPath();
+    ctx.arc(0, 0, 45, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = "white";
+    ctx.beginPath(); ctx.arc(-18, -5, 10, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(18, -5, 10, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "black";
+    ctx.beginPath(); ctx.arc(-18, -5, 4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(18, -5, 4, 0, Math.PI*2); ctx.fill();
+
+    // Mouth
+    ctx.beginPath();
+    if (s.chewing > 0) {
+        ctx.ellipse(0, 20, 20, 5 + Math.sin(t*0.05)*5, 0, 0, Math.PI*2);
+        s.chewing--;
+    } else if (s.mouthOpen) {
+        ctx.arc(0, 25, 20, 0, Math.PI*2);
+    } else {
+        ctx.arc(0, 15, 15, 0, Math.PI, false);
+    }
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+function animate(t) {
+    ctx.clearRect(0, 0, width, height);
+    
+    // Food Tray
+    ctx.fillStyle = "#e1e1eb";
+    ctx.fillRect(0, height-150, width, 150);
+
+    characters.forEach(s => drawSprunki(s, t));
+    
+    foodItems.forEach(f => {
+        ctx.fillStyle = f.color;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 25, 0, Math.PI*2);
+        ctx.fill();
+    });
+
+    requestAnimationFrame(animate);
+}
+
+// Touch/Mouse Events
+canvas.addEventListener('mousedown', (e) => handleStart(e.clientX, e.clientY));
+canvas.addEventListener('mousemove', (e) => handleMove(e.clientX, e.clientY));
+canvas.addEventListener('mouseup', handleEnd);
+
+canvas.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    handleStart(t.clientX, t.clientY);
+});
+canvas.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    handleMove(t.clientX, t.clientY);
+});
+canvas.addEventListener('touchend', handleEnd);
+
+function handleStart(x, y) {
+    foodItems.forEach(f => {
+        if (Math.hypot(f.x - x, f.y - y) < 40) draggingFood = f;
+    });
+    if (!draggingFood) {
+        characters.forEach(s => {
+            if (Math.hypot(s.x - x, s.y - y) < 60) s.isPlaying = !s.isPlaying;
+        });
+    }
+}
+
+function handleMove(x, y) {
+    if (draggingFood) {
+        draggingFood.x = x;
+        draggingFood.y = y;
+        characters.forEach(s => {
+            s.mouthOpen = Math.hypot(s.x - x, s.y - y) < 80;
+        });
+    }
+}
+
+function handleEnd() {
+    if (draggingFood) {
+        characters.forEach(s => {
+            if (s.mouthOpen) s.chewing = 60;
+            s.mouthOpen = false;
+        });
+        draggingFood.x = width * (foodItems.indexOf(draggingFood) * 0.2 + 0.2);
+        draggingFood.y = height - 80;
+        draggingFood = null;
+    }
+}
+
+stopBtn.onclick = () => characters.forEach(s => s.isPlaying = false);
+
+window.onresize = init;
+init();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
